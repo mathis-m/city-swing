@@ -1,6 +1,6 @@
 import {
     BoxGeometry,
-    Clock, CubeTexture,
+    Clock,
     CubeTextureLoader,
     HemisphereLight,
     Mesh,
@@ -12,14 +12,15 @@ import {
     RepeatWrapping,
     Scene,
     SpotLight,
-    Sprite,
-    SpriteMaterial,
     sRGBEncoding,
     TextureLoader,
     WebGLRenderer
 } from "three";
 import {FirstPersonControls} from "./controls/first-person-controls";
 import Stats from "three/examples/jsm/libs/stats.module";
+import {Crosshair} from "./game-objects/gui";
+import {WorldObjectData, WorldObjectTags} from "./game-objects/world";
+import {CrosshairBehaviour} from "./behaviours";
 
 
 export class App {
@@ -30,7 +31,9 @@ export class App {
 
     private renderer!: WebGLRenderer;
 
-    private sprite!: Sprite;
+    private crosshair!: Crosshair;
+    private crosshairBehaviour: CrosshairBehaviour = new CrosshairBehaviour();
+
     private clock: Clock;
     private stats: Stats;
     private container: HTMLDivElement;
@@ -60,6 +63,10 @@ export class App {
     }
 
     private initScene() {
+
+        this.crosshair = new Crosshair(this.renderer, this.uiScene, this.camera.aspect);
+
+
         const loader = new CubeTextureLoader();
         const texture = loader.load([
             'images/textures/posx.jpg',
@@ -97,6 +104,9 @@ export class App {
         box.position.set(10, 2, 0);
         box.castShadow = true;
         box.receiveShadow = true;
+        box.userData = {
+            tags: [WorldObjectTags.Attachable]
+        } as WorldObjectData;
         this.scene.add(box);
 
         const concreteMaterial = this.loadMaterial('concrete3-', 4);
@@ -132,17 +142,6 @@ export class App {
         wall4.castShadow = true;
         wall4.receiveShadow = true;
         this.scene.add(wall4);
-
-        // Crosshair
-        const crosshair = mapLoader.load('images/textures/crosshair.png');
-        crosshair.anisotropy = maxAnisotropy;
-
-        this.sprite = new Sprite(
-            new SpriteMaterial({map: crosshair, color: 0xffffff, fog: false, depthTest: false, depthWrite: false}));
-        this.sprite.scale.set(0.15, 0.15 * this.camera.aspect, 1)
-        this.sprite.position.set(0, 0, -10);
-
-        this.uiScene.add(this.sprite);
     }
 
     private initLights() {
@@ -264,6 +263,9 @@ export class App {
         this.stats.update();
 
         this.controls.update(this.clock.getDelta());
+
+        this.crosshairBehaviour.update(this.crosshair, this.camera, this.scene);
+
         this.renderer.autoClear = true;
         this.renderer.render(this.scene, this.camera);
         this.renderer.autoClear = false;
