@@ -16,11 +16,13 @@ import {
     TextureLoader,
     WebGLRenderer
 } from "three";
-import {FirstPersonControls} from "./controls/first-person-controls";
 import Stats from "three/examples/jsm/libs/stats.module";
 import {Crosshair} from "./game-objects/gui";
-import {WorldObjectData, WorldObjectTags} from "./game-objects/world";
+import {Rope, WorldObjectData, WorldObjectTags} from "./game-objects/world";
 import {CrosshairBehaviour} from "./behaviours";
+import {TargetInfo} from "./utils";
+import {Player} from "./game-objects/world/player";
+import {Level1} from "./levels/level1";
 
 
 export class App {
@@ -37,7 +39,10 @@ export class App {
     private clock: Clock;
     private stats: Stats;
     private container: HTMLDivElement;
-    private controls: FirstPersonControls;
+
+    private targetInfo: TargetInfo = new TargetInfo();
+
+    private player: Player;
 
     constructor() {
         this.clock = new Clock();
@@ -51,11 +56,12 @@ export class App {
 
         this.initScene();
 
+        this.player = new Player(this.camera, this.scene, this.renderer, this.targetInfo);
 
         // init controls
-        this.controls = new FirstPersonControls(this.camera, this.renderer.domElement);
-        this.controls.movementSpeed = 150;
-        this.controls.lookSpeed = 0.1;
+        // this.controls = new FirstPersonControls(this.camera, this.renderer.domElement, this.targetInfo, this.rope);
+        // this.controls.movementSpeed = 150;
+        // this.controls.lookSpeed = 0.1;
 
         this.onWindowResize();
 
@@ -65,6 +71,12 @@ export class App {
     private initScene() {
 
         this.crosshair = new Crosshair(this.renderer, this.uiScene, this.camera.aspect);
+
+
+        const level = new Level1();
+        level.init(this.scene, this.renderer);
+        let spawnLocation = level.getSpawnLocation();
+        this.camera.position.copy(spawnLocation);
 
 
         const loader = new CubeTextureLoader();
@@ -79,6 +91,7 @@ export class App {
 
         texture.encoding = sRGBEncoding;
         this.scene.background = texture;
+        return
 
         const mapLoader = new TextureLoader();
         const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -90,62 +103,89 @@ export class App {
         checkerboard.encoding = sRGBEncoding;
 
         const plane = new Mesh(
-            new PlaneGeometry(100, 100, 10, 10),
+            new PlaneGeometry(10000, 10000, 10, 10),
             new MeshStandardMaterial({map: checkerboard}));
         plane.castShadow = false;
         plane.receiveShadow = true;
         plane.rotation.x = -Math.PI / 2;
+        plane.userData = {
+            tags: [WorldObjectTags.Collision]
+        } as WorldObjectData;
         this.scene.add(plane);
 
         const box = new Mesh(
-            new BoxGeometry(4, 4, 4),
+            new BoxGeometry(400, 400, 400),
             this.loadMaterial('vintage-tile1_', 0.2)
         );
-        box.position.set(10, 2, 0);
+        box.position.set(10, 1000, 0);
         box.castShadow = true;
         box.receiveShadow = true;
         box.userData = {
-            tags: [WorldObjectTags.Attachable]
+            tags: [WorldObjectTags.Attachable, WorldObjectTags.Collision]
         } as WorldObjectData;
         this.scene.add(box);
+
+        const box2 = new Mesh(
+            new BoxGeometry(1000, 200, 1000),
+            this.loadMaterial('vintage-tile1_', 0.2)
+        );
+        box2.position.set(10, 200, 0);
+        box2.castShadow = true;
+        box2.receiveShadow = true;
+        box2.userData = {
+            tags: [WorldObjectTags.Attachable, WorldObjectTags.Collision]
+        } as WorldObjectData;
+        this.scene.add(box2);
 
         const concreteMaterial = this.loadMaterial('concrete3-', 4);
 
         const wall1 = new Mesh(
-            new BoxGeometry(100, 100, 4),
+            new BoxGeometry(10000, 10000, 400),
             concreteMaterial);
-        wall1.position.set(0, -40, -50);
+        wall1.position.set(0, -4000, -5000);
         wall1.castShadow = true;
         wall1.receiveShadow = true;
+        wall1.userData = {
+            tags: [WorldObjectTags.Collision]
+        } as WorldObjectData;
         this.scene.add(wall1);
 
         const wall2 = new Mesh(
-            new BoxGeometry(100, 100, 4),
+            new BoxGeometry(10000, 10000, 400),
             concreteMaterial);
-        wall2.position.set(0, -40, 50);
+        wall2.position.set(0, -4000, 5000);
         wall2.castShadow = true;
         wall2.receiveShadow = true;
+        wall2.userData = {
+            tags: [WorldObjectTags.Collision]
+        } as WorldObjectData;
         this.scene.add(wall2);
 
         const wall3 = new Mesh(
-            new BoxGeometry(4, 100, 100),
+            new BoxGeometry(400, 10000, 10000),
             concreteMaterial);
-        wall3.position.set(50, -40, 0);
+        wall3.position.set(5000, -4000, 0);
         wall3.castShadow = true;
         wall3.receiveShadow = true;
+        wall3.userData = {
+            tags: [WorldObjectTags.Collision]
+        } as WorldObjectData;
         this.scene.add(wall3);
 
         const wall4 = new Mesh(
-            new BoxGeometry(4, 100, 100),
+            new BoxGeometry(400, 10000, 10000),
             concreteMaterial);
-        wall4.position.set(-50, -40, 0);
+        wall4.position.set(-5000, -4000, 0);
         wall4.castShadow = true;
         wall4.receiveShadow = true;
+        wall4.userData = {
+            tags: [WorldObjectTags.Collision]
+        } as WorldObjectData;
         this.scene.add(wall4);
     }
 
     private initLights() {
-        const distance = 50.0;
+        const distance = 5000.0;
         const angle = Math.PI / 4.0;
         const penumbra = 0.5;
         const decay = 1.0;
@@ -159,7 +199,7 @@ export class App {
         spotLight.shadow.camera.near = 1;
         spotLight.shadow.camera.far = 100;
 
-        spotLight.position.set(25, 25, 0);
+        spotLight.position.set(2500, 2500, 0);
         spotLight.lookAt(0, 0, 0);
         this.scene.add(spotLight);
 
@@ -168,7 +208,7 @@ export class App {
         const hemiLight = new HemisphereLight(upColour, downColour, 0.5);
         hemiLight.color.setHSL(0.6, 1, 0.6);
         hemiLight.groundColor.setHSL(0.095, 1, 0.75);
-        hemiLight.position.set(0, 4, 0);
+        hemiLight.position.set(0, 400, 0);
         this.scene.add(hemiLight);
     }
 
@@ -193,8 +233,14 @@ export class App {
         const aspect = 1920 / 1080;
         const near = 1.0;
         const far = 1000.0;
-        this.camera = new PerspectiveCamera(fov, aspect, near, far);
-        this.camera.position.set(0, 2, 0);
+        this.camera = new PerspectiveCamera(
+            65,
+            window.innerWidth / window.innerHeight,
+            0.01,
+            100000
+        );
+        //this.camera = new PerspectiveCamera(fov, aspect, near, far);
+        this.camera.position.set(0, 150, 0);
 
         this.scene = new Scene();
 
@@ -206,7 +252,7 @@ export class App {
         const mapLoader = new TextureLoader();
         const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
 
-        const metalMap = mapLoader.load('resources/freepbr/' + name + 'metallic.png');
+        const metalMap = mapLoader.load('images/textures/' + name + 'metallic.png');
         metalMap.anisotropy = maxAnisotropy;
         metalMap.wrapS = RepeatWrapping;
         metalMap.wrapT = RepeatWrapping;
@@ -248,8 +294,6 @@ export class App {
         this.uiCamera.updateProjectionMatrix();
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-
-        this.controls.handleResize();
     }
 
     private animate(): void {
@@ -262,15 +306,19 @@ export class App {
     private render() {
         this.stats.update();
 
-        this.controls.update(this.clock.getDelta());
+        const delta = this.clock.getDelta();
 
-        this.crosshairBehaviour.update(this.crosshair, this.camera, this.scene);
+        this.targetInfo.update(this.camera, this.scene);
+        this.crosshairBehaviour.update(this.crosshair, this.targetInfo);
+
+        this.player.update(delta);
 
         this.renderer.autoClear = true;
         this.renderer.render(this.scene, this.camera);
         this.renderer.autoClear = false;
         this.renderer.render(this.uiScene, this.uiCamera);
     }
+
 }
 
 new App();

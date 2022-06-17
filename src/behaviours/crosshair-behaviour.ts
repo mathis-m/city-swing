@@ -1,30 +1,13 @@
 import {Crosshair} from "../game-objects/gui";
 import {Behaviour} from "./behaviour";
-import {Color, PerspectiveCamera, Raycaster, Scene, Vector3} from "three";
-import {WorldObjectData, WorldObjectTags} from "../game-objects/world";
+import {Color} from "three";
+import {TargetInfo} from "../utils";
 
-export class CrosshairBehaviour implements Behaviour<Crosshair, [PerspectiveCamera, Scene]> {
+export class CrosshairBehaviour implements Behaviour<Crosshair, [TargetInfo]> {
     private colorNeutral = new Color(0xffffff);
     private colorCanAttach = new Color(0x299A20);
 
-    update(crosshair: Crosshair, camera: PerspectiveCamera, scene: Scene) {
-        let targetsAttachable = false;
-
-        const rayCaster = new Raycaster()
-        rayCaster.setFromCamera(new Vector3(), camera);
-        for (const sceneElement of scene.children) {
-            const metaData: WorldObjectData = sceneElement.userData;
-            const canAttachToObject = metaData.tags && metaData.tags.includes(WorldObjectTags.Attachable);
-
-            if (!canAttachToObject) continue;
-
-            const intersections = rayCaster.intersectObject(sceneElement);
-            if (intersections.length > 0) {
-                targetsAttachable = true;
-                break;
-            }
-        }
-
-        crosshair.material.color = targetsAttachable ? this.colorCanAttach : this.colorNeutral;
+    update(crosshair: Crosshair, targetInfo: TargetInfo) {
+        crosshair.material.color = targetInfo.canAttach ? this.colorCanAttach : this.colorNeutral;
     }
 }

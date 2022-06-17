@@ -1,5 +1,6 @@
 export enum WorldObjectTags {
-    Attachable
+    Attachable,
+    Collision
 }
 
 export interface WorldObjectData {

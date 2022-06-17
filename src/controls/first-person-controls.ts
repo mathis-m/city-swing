@@ -1,4 +1,6 @@
 import {MathUtils, PerspectiveCamera, Quaternion, Spherical, Vector3} from "three";
+import {TargetInfo} from "../utils";
+import {Rope} from "../game-objects/world";
 
 interface State {
     mouseX: number;
@@ -13,10 +15,20 @@ interface State {
 
     mouseLeft: boolean;
     mouseRight: boolean;
+
+    jump: boolean;
+
+    onRope: boolean;
 }
 
 export class FirstPersonControls {
-    private readonly current: State;
+    private walkSpeed = 2;
+    private airwalkSpeed = 0.25;
+    private jumpStrength = 13;
+
+
+    private targetInfo: TargetInfo;
+    public readonly current: State;
     private previous: State | null = null;
     private _onMouseMove = this.onMouseMove.bind(this);
     private _onMouseDown = this.onMouseDown.bind(this);
@@ -24,12 +36,12 @@ export class FirstPersonControls {
     private _onKeyDown = this.onKeyDown.bind(this);
     private _onKeyUp = this.onKeyUp.bind(this);
 
-    private rotation_ = new Quaternion();
-    private translation_ = new Vector3(0, 2, 0);
+    private rotation = new Quaternion();
+    private translation = new Vector3(0, 2, 0);
 
-    private phi_ = 0;
+    private phi = 0;
     private phiSpeed_ = 8;
-    private theta_ = 0;
+    private theta = 0;
     private thetaSpeed_ = 5;
 
     private _lookDirection = new Vector3();
@@ -54,9 +66,12 @@ export class FirstPersonControls {
     public verticalMax = Math.PI;
 
     public mouseDragOn = false;
+    private rope: Rope;
 
 
-    constructor(camera: PerspectiveCamera, domElement: HTMLCanvasElement) {
+    constructor(camera: PerspectiveCamera, domElement: HTMLCanvasElement, targetInfo: TargetInfo, rope: Rope) {
+        this.targetInfo = targetInfo;
+        this.rope = rope;
         this.current = {
             mouseXDelta: 0,
             mouseYDelta: 0,
@@ -69,9 +84,12 @@ export class FirstPersonControls {
             moveBackward: false,
             moveRight: false,
             moveForward: false,
-            moveLeft: false
-        }
+            moveLeft: false,
 
+            jump: false,
+
+            onRope: false
+        }
 
 
         this.camera = camera;
@@ -101,6 +119,17 @@ export class FirstPersonControls {
             switch (event.button) {
                 case 0:
                     this.current.mouseLeft = true;
+
+                    if (this.current.onRope)
+                        break;
+
+                    if (!this.targetInfo.canAttach)
+                        break;
+
+                    this.current.onRope = true;
+                    this.rope.set(this.camera.position, this.targetInfo.targetDistance);
+                    this.targetInfo.isAttached = true;
+
                     break;
                 case 2:
                     this.current.mouseRight = true;
@@ -117,6 +146,11 @@ export class FirstPersonControls {
             switch (event.button) {
                 case 0:
                     this.current.mouseLeft = false;
+
+                    this.current.onRope = false;
+                    this.targetInfo.isAttached = false;
+                    this.rope.hide();
+
                     break;
                 case 2:
                     this.current.mouseRight = false;
@@ -157,6 +191,9 @@ export class FirstPersonControls {
             case 'KeyD':
                 this.current.moveRight = true;
                 break;
+            case 'Space':
+                this.current.jump = true;
+                break;
             //
             // case 'KeyR': this.moveUp = true; break;
             // case 'KeyF': this.moveDown = true; break;
@@ -180,6 +217,9 @@ export class FirstPersonControls {
             case 'ArrowRight':
             case 'KeyD':
                 this.current.moveRight = false;
+                break;
+            case 'Space':
+                this.current.jump = false;
                 break;
             // case 'KeyR':
             //     this.moveUp = false;
@@ -235,40 +275,40 @@ export class FirstPersonControls {
         const xh = this.current.mouseXDelta / window.innerWidth;
         const yh = this.current.mouseYDelta / window.innerHeight;
 
-        this.phi_ += -xh * this.phiSpeed_;
-        this.theta_ = MathUtils.clamp(this.theta_ + -yh * this.thetaSpeed_, -Math.PI / 3, Math.PI / 3);
+        this.phi += -xh * this.phiSpeed_;
+        this.theta = MathUtils.clamp(this.theta + -yh * this.thetaSpeed_, -Math.PI / 3, Math.PI / 3);
 
         const qx = new Quaternion();
-        qx.setFromAxisAngle(new Vector3(0, 1, 0), this.phi_);
+        qx.setFromAxisAngle(new Vector3(0, 1, 0), this.phi);
         const qz = new Quaternion();
-        qz.setFromAxisAngle(new Vector3(1, 0, 0), this.theta_);
+        qz.setFromAxisAngle(new Vector3(1, 0, 0), this.theta);
 
         const q = new Quaternion();
         q.multiply(qx);
         q.multiply(qz);
 
-        this.rotation_.copy(q);
+        this.rotation.copy(q);
     }
 
     private updateCamera() {
-        this.camera.quaternion.copy(this.rotation_);
-        this.camera.position.copy(this.translation_);
+        this.camera.quaternion.copy(this.rotation);
+        this.camera.position.copy(this.translation);
 
         const forward = new Vector3(0, 0, -1);
-        forward.applyQuaternion(this.rotation_);
+        forward.applyQuaternion(this.rotation);
 
         forward.multiplyScalar(100);
-        forward.add(this.translation_);
+        forward.add(this.translation);
 
         this.camera.lookAt(forward);
     }
-    
+
     private updateTranslation(delta: number) {
         const forwardVelocity = (this.current.moveForward ? 1 : 0) + (this.current.moveBackward ? -1 : 0);
         const strafeVelocity = (this.current.moveLeft ? 1 : 0) + (this.current.moveRight ? -1 : 0);
 
         const qx = new Quaternion();
-        qx.setFromAxisAngle(new Vector3(0, 1, 0), this.phi_);
+        qx.setFromAxisAngle(new Vector3(0, 1, 0), this.phi);
 
         const forward = new Vector3(0, 0, -1);
         forward.applyQuaternion(qx);
@@ -278,8 +318,8 @@ export class FirstPersonControls {
         left.applyQuaternion(qx);
         left.multiplyScalar(strafeVelocity * delta * 10);
 
-        this.translation_.add(forward);
-        this.translation_.add(left);
+        this.translation.add(forward);
+        this.translation.add(left);
     }
 
     public dispose() {
