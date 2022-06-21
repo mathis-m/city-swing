@@ -1,8 +1,10 @@
 export enum WorldObjectTags {
     Attachable,
-    Collision
+    Collision,
+    Platform
 }
 
 export interface WorldObjectData {
     tags?: WorldObjectTags[];
+    isCollected?: boolean;
 }

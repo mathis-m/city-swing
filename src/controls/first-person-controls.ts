@@ -1,5 +1,5 @@
 import {MathUtils, PerspectiveCamera, Quaternion, Spherical, Vector3} from "three";
-import {TargetInfo} from "../utils";
+import {TargetInfo} from "../utils/target-info";
 import {Rope} from "../game-objects/world";
 
 interface State {

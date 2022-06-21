@@ -1,5 +1,5 @@
 import {DoubleSide, MeshStandardMaterial, RepeatWrapping, Scene, TextureLoader, Vector3} from "three";
-import {IK} from "../../utils";
+import {IK} from "../../utils/IK";
 
 export class Rope extends IK {
     constructor(scene: Scene) {

@@ -1,16 +1,19 @@
 import {
-    BackSide, Box3, Euler, Matrix3,
-    Mesh,
-    MeshLambertMaterial, Object3D,
-    PerspectiveCamera, Raycaster, Renderer, Scene,
-    SphereBufferGeometry, SphereGeometry,
-    TextureLoader,
+    Box3,
+    Euler,
+    MathUtils,
+    Matrix3,
+    Object3D,
+    PerspectiveCamera,
+    Quaternion,
+    Raycaster,
+    Renderer,
+    Scene,
     Vector3
 } from "three";
 import {Rope} from "./rope";
-import {TargetInfo} from "../../utils";
 import {WorldObjectData, WorldObjectTags} from "./world-object-data";
-
+import {TargetInfo} from "../../utils/target-info";
 
 interface KeyState {
     moveForward: boolean;
@@ -41,13 +44,11 @@ export class Player {
     private raycaster = new Raycaster();
     private camera: PerspectiveCamera;
     private cameraDirection: Vector3;
-    private skybox: Mesh<SphereGeometry, MeshLambertMaterial>;
     private velocity: Vector3;
     private nextVelocity: Vector3;
     private nextPosition: Vector3;
     private down: Vector3;
     private gravity: number;
-    private points: number;
     private height: number;
     private mouseSensitivity: number;
     private walkSpeed: number;
@@ -56,38 +57,53 @@ export class Player {
     private grounded: boolean;
     private onRope: boolean;
     private ropeLength: number;
-    private ropeClimbSpeed: number;
     private ropeTarget: Vector3;
     private positionOnEndOfRope: Vector3;
     private ropePositionDifference: Vector3;
     private ropeObject: Rope;
     private mouseDragOn: boolean = false;
 
+    private phi = 0;
+    private phiSpeed_ = 8;
+    private theta = 0;
+    private thetaSpeed_ = 5;
+
+    private viewHalfX = 0;
+    private viewHalfY = 0;
+
+
     private _onMouseDown = this.onMouseDown.bind(this);
     private _onMouseUp = this.onMouseUp.bind(this);
     private _onKeyDown = this.onKeyDown.bind(this);
-    private _onMouseMove = this.onMouseMove.bind(this);
+    onMouseMove = this._onMouseMove.bind(this);
     private _onKeyUp = this.onKeyUp.bind(this);
-    private _pointerlockCallback = this.pointerlockCallback.bind(this);
     private scene: Scene;
     private renderer: Renderer;
     private targetInfo: TargetInfo;
 
+    private initialPosition: Vector3;
+    private initialRotation: Euler;
+    private initialQuaternion: Quaternion;
+
+    private counterDiv: HTMLDivElement;
+    private points = 0;
+
+
     constructor(camera: PerspectiveCamera, scene: Scene, renderer: Renderer, targetInfo: TargetInfo) {
+        const elementById = document.getElementById("counter");
+        if (!elementById) throw new Error("Counter not found");
+        this.counterDiv = elementById as HTMLDivElement;
+
+        this.counterDiv.innerText = `${this.points}`;
+
+        this.initialPosition = camera.position.clone();
+        this.initialRotation = camera.rotation.clone();
+        this.initialQuaternion = camera.quaternion.clone();
         this.camera = camera;
         this.scene = scene;
         this.targetInfo = targetInfo;
         this.cameraDirection = new Vector3();
         this.camera.rotation.order = "YXZ";
-
-        this.skybox = new Mesh(
-            new SphereBufferGeometry(90000, 32, 32),
-            new MeshLambertMaterial({
-                map: new TextureLoader().load('/images/sky.png'),
-                side: BackSide
-            })
-        );
-        //scene.add(this.skybox);
 
         this.velocity = new Vector3();
         this.nextVelocity = new Vector3();
@@ -95,19 +111,17 @@ export class Player {
         this.down = new Vector3(0, -1, 0);
         this.gravity = 28;
 
-        this.points = 0;
         this.height = 100;
         this.mouseSensitivity = 0.0012;
 
-        this.walkSpeed = 2;
-        this.airwalkSpeed = 0.25;
-        this.jumpStrength = 13;
+        this.walkSpeed = 5;
+        this.airwalkSpeed = 0.3;
+        this.jumpStrength = 16;
 
         this.grounded = false;
         this.onRope = false;
 
         this.ropeLength = 0;
-        this.ropeClimbSpeed = 275;
 
         this.ropeTarget = new Vector3();
         this.positionOnEndOfRope = new Vector3();
@@ -115,11 +129,6 @@ export class Player {
 
         this.ropeObject = new Rope(scene);
 
-        document.addEventListener('pointerlockchange', this._pointerlockCallback, false);
-        // renderer.domElement.addEventListener('mousemove', this._onMouseMove);
-        window.onfocus = function () {
-            renderer.domElement.requestPointerLock();
-        };
 
         renderer.domElement.addEventListener('mousedown', this._onMouseDown);
         renderer.domElement.addEventListener('mouseup', this._onMouseUp);
@@ -127,19 +136,47 @@ export class Player {
         window.addEventListener('keydown', this._onKeyDown);
         window.addEventListener('keyup', this._onKeyUp);
         this.renderer = renderer;
+        this.handleResize();
     }
 
+    public reset() {
+        this.counterDiv.innerText = `0`;
+        this.points = 0;
 
-    private pointerlockCallback() {
-        debugger;
-        // check if pointerlock is activated, or not.
-        if (document.pointerLockElement === this.renderer.domElement) {
-            // add mouse move event
-            document.addEventListener("mousemove", this._onMouseMove, false);
-        } else {
-            // remove mouse move event
-            document.removeEventListener("mousemove", this._onMouseMove, false);
-        }
+        this.scene.children.forEach(block => {
+            if(!block.userData) return;
+            const userData = block.userData as WorldObjectData;
+            if(!userData.tags || !userData.tags.includes(WorldObjectTags.Platform)) return;
+            userData.isCollected = false;
+        })
+
+        this.camera.position.copy(this.initialPosition);
+        this.camera.rotation.copy(this.initialRotation);
+        this.camera.quaternion.copy(this.initialQuaternion);
+
+        this.velocity.multiplyScalar(0);
+
+        this.grounded = false;
+        this.onRope = false;
+
+        this.phi = 0;
+        this.theta = 0;
+        this.keyState = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+
+            mouseLeft: false,
+            mouseRight: false,
+
+            jump: false,
+        };
+    }
+
+    public handleResize() {
+        this.viewHalfX = this.renderer.domElement.offsetWidth / 2;
+        this.viewHalfY = this.renderer.domElement.offsetHeight / 2;
     }
 
 
@@ -163,6 +200,9 @@ export class Player {
                 break;
             case 'Space':
                 this.keyState.jump = true;
+                break;
+            case 'KeyR':
+                this.reset();
                 break;
         }
     }
@@ -253,9 +293,6 @@ export class Player {
 
         //update the IK rope
         if (this.onRope) this.updateRope();
-
-        //move skybox
-        this.skybox.position.copy(this.position);
     }
 
     updateRope() {
@@ -338,23 +375,28 @@ export class Player {
 
     }
 
-    onMouseMove(e: MouseEvent) {
+    _onMouseMove(event: MouseEvent) {
+        const xh = event.movementX / window.innerWidth;
+        const yh = event.movementY / window.innerHeight;
 
-        this.camera.rotateY(e.movementX * -this.mouseSensitivity);
-        this.camera.rotateX(e.movementY * -this.mouseSensitivity);
+        this.phi += -xh * this.phiSpeed_;
+        this.theta = MathUtils.clamp(this.theta + -yh * this.thetaSpeed_, -Math.PI / 3, Math.PI / 3);
 
-        let half_pi = Math.PI * 0.5;
-        this.camera.rotation.x = Math.max(-half_pi + 0.15, Math.min(this.camera.rotation.x, half_pi - 0.15));
+        const qx = new Quaternion();
+        qx.setFromAxisAngle(new Vector3(0, 1, 0), this.phi);
+        const qz = new Quaternion();
+        qz.setFromAxisAngle(new Vector3(1, 0, 0), this.theta);
 
-        this.camera.rotation.z = 0;
-
+        const q = new Quaternion();
+        q.multiply(qx);
+        q.multiply(qz);
+        this.camera.quaternion.copy(q);
     }
 
     rotateInput(input: Vector3) {
         //rotated to players y-axis rotation
         let playerRotation = new Euler(0, this.camera.rotation.y, 0, 'YXZ');
         return input.normalize().applyEuler(playerRotation);
-
     }
 
 
@@ -430,7 +472,11 @@ export class Player {
 
                     //set grounded flag
                     groundedOnBlocks = true;
-
+                    if(!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
+                        this.points++;
+                        (block.userData as WorldObjectData).isCollected = true;
+                        this.counterDiv.innerText = `${this.points}`;
+                    }
                 } else {
 
                     //colliding in the direction of the velocity
@@ -456,7 +502,11 @@ export class Player {
 
                         //set grounded flag
                         groundedOnBlocks = true;
-
+                        if(!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
+                            this.points++;
+                            (block.userData as WorldObjectData).isCollected = true;
+                            this.counterDiv.innerText = `${this.points}`;
+                        }
                     }
 
                 }
@@ -489,8 +539,8 @@ export class Player {
     }
 
     checkOnBoundaries() {
-        if (this.position.y < -1600 && !this.onRope) {
-            //game.reset();
+        if (this.position.y < -8000 && !this.onRope) {
+            this.reset();
         }
     }
 }

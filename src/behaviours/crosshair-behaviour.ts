@@ -1,7 +1,7 @@
 import {Crosshair} from "../game-objects/gui";
 import {Behaviour} from "./behaviour";
 import {Color} from "three";
-import {TargetInfo} from "../utils";
+import {TargetInfo} from "../utils/target-info";
 
 export class CrosshairBehaviour implements Behaviour<Crosshair, [TargetInfo]> {
     private colorNeutral = new Color(0xffffff);

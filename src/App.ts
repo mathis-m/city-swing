@@ -1,31 +1,32 @@
 import {
-    BoxGeometry,
     Clock,
     CubeTextureLoader,
     HemisphereLight,
-    Mesh,
+    MathUtils,
     MeshStandardMaterial,
     OrthographicCamera,
     PCFSoftShadowMap,
     PerspectiveCamera,
-    PlaneGeometry,
     RepeatWrapping,
     Scene,
     SpotLight,
     sRGBEncoding,
     TextureLoader,
+    Vector3,
     WebGLRenderer
 } from "three";
 import Stats from "three/examples/jsm/libs/stats.module";
 import {Crosshair} from "./game-objects/gui";
-import {Rope, WorldObjectData, WorldObjectTags} from "./game-objects/world";
 import {CrosshairBehaviour} from "./behaviours";
-import {TargetInfo} from "./utils";
+import {LevelGenerator} from "./levels/levelGenerator";
+import {Sky} from "three/examples/jsm/objects/Sky";
+import {TargetInfo} from "./utils/target-info";
 import {Player} from "./game-objects/world/player";
-import {Level1} from "./levels/level1";
 
 
 export class App {
+    private _pointerlockCallback = this.pointerlockCallback.bind(this);
+
     private camera!: PerspectiveCamera;
     private scene!: Scene;
     private uiCamera!: OrthographicCamera;
@@ -36,25 +37,59 @@ export class App {
     private crosshair!: Crosshair;
     private crosshairBehaviour: CrosshairBehaviour = new CrosshairBehaviour();
 
-    private clock: Clock;
-    private stats: Stats;
-    private container: HTMLDivElement;
+    private clock!: Clock;
+    private stats!: Stats;
+    private container!: HTMLDivElement;
 
     private targetInfo: TargetInfo = new TargetInfo();
 
-    private player: Player;
+    private player!: Player;
+    private sky!: Sky;
+    private sun!: Vector3;
+    private levelGen!: LevelGenerator;
 
     constructor() {
+        // this.setupGame();
+        const startBtn = document.getElementById("start-normal");
+
+        startBtn?.addEventListener("click", this.startNormal.bind(this));
+    }
+
+
+    private pointerlockCallback() {
+        // check if pointerlock is activated, or not.
+        if (document.pointerLockElement === this.renderer.domElement) {
+            // add mouse move event
+            document.addEventListener("mousemove", this.player.onMouseMove, false);
+        } else {
+            // remove mouse move event
+            document.removeEventListener("mousemove", this.player.onMouseMove, false);
+        }
+    }
+
+    private startNormal() {
+        const menuDiv = document.getElementById("main");
+        if (menuDiv)
+            menuDiv.style.display = "none";
+
+        const pointsDiv = document.getElementById("points");
+        if (pointsDiv)
+            pointsDiv.style.display = "flex";
+
+
         this.clock = new Clock();
         // @ts-ignore
         this.stats = new Stats();
         this.container = document.getElementById("app") as HTMLDivElement;
 
+
         this.initRenderer();
+        this.initSky();
 
         this.initLights();
 
         this.initScene();
+
 
         this.player = new Player(this.camera, this.scene, this.renderer, this.targetInfo);
 
@@ -65,7 +100,18 @@ export class App {
 
         this.onWindowResize();
 
+        document.addEventListener('pointerlockchange', this._pointerlockCallback, false);
+        window.onfocus = () => {
+            this.renderer.domElement.requestPointerLock();
+        };
+        this.renderer.domElement.requestPointerLock();
+
+
         this.animate();
+    }
+
+    private setupGame() {
+
     }
 
     private initScene() {
@@ -73,9 +119,9 @@ export class App {
         this.crosshair = new Crosshair(this.renderer, this.uiScene, this.camera.aspect);
 
 
-        const level = new Level1();
-        level.init(this.scene, this.renderer);
-        let spawnLocation = level.getSpawnLocation();
+        this.levelGen = new LevelGenerator();
+        this.levelGen.init(this.scene, this.renderer);
+        let spawnLocation = this.levelGen.getSpawnLocation();
         this.camera.position.copy(spawnLocation);
 
 
@@ -91,97 +137,6 @@ export class App {
 
         texture.encoding = sRGBEncoding;
         this.scene.background = texture;
-        return
-
-        const mapLoader = new TextureLoader();
-        const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
-        const checkerboard = mapLoader.load('images/textures/checkerboard.png');
-        checkerboard.anisotropy = maxAnisotropy;
-        checkerboard.wrapS = RepeatWrapping;
-        checkerboard.wrapT = RepeatWrapping;
-        checkerboard.repeat.set(32, 32);
-        checkerboard.encoding = sRGBEncoding;
-
-        const plane = new Mesh(
-            new PlaneGeometry(10000, 10000, 10, 10),
-            new MeshStandardMaterial({map: checkerboard}));
-        plane.castShadow = false;
-        plane.receiveShadow = true;
-        plane.rotation.x = -Math.PI / 2;
-        plane.userData = {
-            tags: [WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(plane);
-
-        const box = new Mesh(
-            new BoxGeometry(400, 400, 400),
-            this.loadMaterial('vintage-tile1_', 0.2)
-        );
-        box.position.set(10, 1000, 0);
-        box.castShadow = true;
-        box.receiveShadow = true;
-        box.userData = {
-            tags: [WorldObjectTags.Attachable, WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(box);
-
-        const box2 = new Mesh(
-            new BoxGeometry(1000, 200, 1000),
-            this.loadMaterial('vintage-tile1_', 0.2)
-        );
-        box2.position.set(10, 200, 0);
-        box2.castShadow = true;
-        box2.receiveShadow = true;
-        box2.userData = {
-            tags: [WorldObjectTags.Attachable, WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(box2);
-
-        const concreteMaterial = this.loadMaterial('concrete3-', 4);
-
-        const wall1 = new Mesh(
-            new BoxGeometry(10000, 10000, 400),
-            concreteMaterial);
-        wall1.position.set(0, -4000, -5000);
-        wall1.castShadow = true;
-        wall1.receiveShadow = true;
-        wall1.userData = {
-            tags: [WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(wall1);
-
-        const wall2 = new Mesh(
-            new BoxGeometry(10000, 10000, 400),
-            concreteMaterial);
-        wall2.position.set(0, -4000, 5000);
-        wall2.castShadow = true;
-        wall2.receiveShadow = true;
-        wall2.userData = {
-            tags: [WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(wall2);
-
-        const wall3 = new Mesh(
-            new BoxGeometry(400, 10000, 10000),
-            concreteMaterial);
-        wall3.position.set(5000, -4000, 0);
-        wall3.castShadow = true;
-        wall3.receiveShadow = true;
-        wall3.userData = {
-            tags: [WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(wall3);
-
-        const wall4 = new Mesh(
-            new BoxGeometry(400, 10000, 10000),
-            concreteMaterial);
-        wall4.position.set(-5000, -4000, 0);
-        wall4.castShadow = true;
-        wall4.receiveShadow = true;
-        wall4.userData = {
-            tags: [WorldObjectTags.Collision]
-        } as WorldObjectData;
-        this.scene.add(wall4);
     }
 
     private initLights() {
@@ -232,14 +187,15 @@ export class App {
         const fov = 60;
         const aspect = 1920 / 1080;
         const near = 1.0;
-        const far = 1000.0;
-        this.camera = new PerspectiveCamera(
-            65,
-            window.innerWidth / window.innerHeight,
-            0.01,
-            100000
-        );
-        //this.camera = new PerspectiveCamera(fov, aspect, near, far);
+        const far = 100000.0;
+        // this.camera = new PerspectiveCamera(
+        //     65,
+        //     window.innerWidth / window.innerHeight,
+        //     0.01,
+        //     100000
+        // );
+        //
+        this.camera = new PerspectiveCamera(fov, aspect, near, far);
         this.camera.position.set(0, 150, 0);
 
         this.scene = new Scene();
@@ -313,12 +269,35 @@ export class App {
 
         this.player.update(delta);
 
+        this.levelGen.update(this.scene, this.renderer);
+
         this.renderer.autoClear = true;
         this.renderer.render(this.scene, this.camera);
         this.renderer.autoClear = false;
         this.renderer.render(this.uiScene, this.uiCamera);
     }
 
+    private initSky() {
+        // Add Sky
+        this.sky = new Sky();
+        this.sky.scale.setScalar(45000000);
+        this.scene.add(this.sky);
+
+        this.sun = new Vector3();
+
+        const uniforms = this.sky.material.uniforms;
+        uniforms['turbidity'].value = 10;
+        uniforms['rayleigh'].value = 3;
+        uniforms['mieCoefficient'].value = 0.005;
+        uniforms['mieDirectionalG'].value = 0.7;
+
+        const phi = MathUtils.degToRad(88);
+        const theta = MathUtils.degToRad(180);
+
+        this.sun.setFromSphericalCoords(1, phi, theta);
+
+        uniforms['sunPosition'].value.copy(this.sun);
+    }
 }
 
 new App();
