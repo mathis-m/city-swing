@@ -13,7 +13,9 @@ import {
     sRGBEncoding,
     TextureLoader,
     Vector3,
-    WebGLRenderer
+    WebGLRenderer,
+    AudioListener,
+    Audio, AudioLoader
 } from "three";
 import Stats from "three/examples/jsm/libs/stats.module";
 import {Crosshair} from "./game-objects/gui";
@@ -22,6 +24,7 @@ import {LevelGenerator} from "./levels/levelGenerator";
 import {Sky} from "three/examples/jsm/objects/Sky";
 import {TargetInfo} from "./utils/target-info";
 import {Player} from "./game-objects/world/player";
+import {soundManager} from "./sound-manager/sound-manager";
 
 
 export class App {
@@ -67,7 +70,7 @@ export class App {
         }
     }
 
-    private startNormal() {
+    private async startNormal() {
         const menuDiv = document.getElementById("main");
         if (menuDiv)
             menuDiv.style.display = "none";
@@ -89,7 +92,7 @@ export class App {
         this.initLights();
 
         this.initScene();
-
+        await this.initSound();
 
         this.player = new Player(this.camera, this.scene, this.renderer, this.targetInfo);
 
@@ -110,8 +113,9 @@ export class App {
         this.animate();
     }
 
-    private setupGame() {
-
+    private async initSound() {
+        await soundManager.init(this.camera);
+        soundManager.toggleAmbient();
     }
 
     private initScene() {

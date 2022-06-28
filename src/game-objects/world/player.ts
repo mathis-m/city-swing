@@ -14,6 +14,7 @@ import {
 import {Rope} from "./rope";
 import {WorldObjectData, WorldObjectTags} from "./world-object-data";
 import {TargetInfo} from "../../utils/target-info";
+import {soundManager} from "../../sound-manager/sound-manager";
 
 interface KeyState {
     moveForward: boolean;
@@ -144,9 +145,9 @@ export class Player {
         this.points = 0;
 
         this.scene.children.forEach(block => {
-            if(!block.userData) return;
+            if (!block.userData) return;
             const userData = block.userData as WorldObjectData;
-            if(!userData.tags || !userData.tags.includes(WorldObjectTags.Platform)) return;
+            if (!userData.tags || !userData.tags.includes(WorldObjectTags.Platform)) return;
             userData.isCollected = false;
         })
 
@@ -243,6 +244,8 @@ export class Player {
 
                 if (!this.targetInfo.canAttach) break;
 
+                soundManager.playGrab();
+
                 this.ropeTarget.copy(this.targetInfo.target);
                 this.ropeLength = this.targetInfo.targetDistance;
                 this.onRope = true;
@@ -264,6 +267,7 @@ export class Player {
 
                 this.onRope = false;
                 this.ropeObject.hide();
+                soundManager.playGrabRelease();
 
                 break;
             case 2:
@@ -472,8 +476,9 @@ export class Player {
 
                     //set grounded flag
                     groundedOnBlocks = true;
-                    if(!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
+                    if (!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
                         this.points++;
+                        soundManager.playGroundHit();
                         (block.userData as WorldObjectData).isCollected = true;
                         this.counterDiv.innerText = `${this.points}`;
                     }
@@ -502,7 +507,7 @@ export class Player {
 
                         //set grounded flag
                         groundedOnBlocks = true;
-                        if(!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
+                        if (!(block.userData as WorldObjectData).isCollected && tags && tags.includes(WorldObjectTags.Platform)) {
                             this.points++;
                             (block.userData as WorldObjectData).isCollected = true;
                             this.counterDiv.innerText = `${this.points}`;
@@ -540,6 +545,7 @@ export class Player {
 
     checkOnBoundaries() {
         if (this.position.y < -8000 && !this.onRope) {
+            soundManager.playGameOver();
             this.reset();
         }
     }

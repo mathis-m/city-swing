@@ -14,6 +14,7 @@ import {WorldObjectData, WorldObjectTags} from "../game-objects/world";
 
 export interface Level {
     init(scene: Scene, renderer: WebGLRenderer): void;
+
     update(scene: Scene, renderer: WebGLRenderer): void;
 
     getSpawnLocation(): Vector3;
@@ -22,10 +23,11 @@ export interface Level {
 export interface Challenge {
     init(scene: Scene, renderer: WebGLRenderer, pos: Vector3): [Vector3, WorldObjectData];
 }
+
 const materials: Record<string, MeshStandardMaterial> = {};
 const loadMaterial = (name: string, tiling: number, renderer: WebGLRenderer) => {
     const key = `${name}_${tiling}`;
-    if(key in materials) {
+    if (key in materials) {
         return materials[key];
     }
     const mapLoader = new TextureLoader();
@@ -115,6 +117,69 @@ export class SimpleSwingChallenge implements Challenge {
         return [nextPos, data];
     }
 }
+
+export class SwingUpOrDownChallenge implements Challenge {
+    private renderer!: WebGLRenderer;
+    private static material?: MeshStandardMaterial;
+    private static isUp = true;
+
+
+    init(scene: Scene, renderer: WebGLRenderer, pos: Vector3): [Vector3, WorldObjectData] {
+        const n = Math.random() < 0.5 ? 3 : 4;
+
+        this.renderer = renderer;
+        if (SwingUpOrDownChallenge.material === undefined)
+            SwingUpOrDownChallenge.material = loadMaterial('vintage-tile1_', 0.2, renderer);
+
+        const building = new Mesh(
+            new BoxGeometry(2000, 2000, 4000),
+            SwingUpOrDownChallenge.material
+        );
+        const gap = 8000 * n;
+        building.position.copy(pos)
+
+        const yAdjustment = (SwingUpOrDownChallenge.isUp ? 2000 : -2000) * n;
+        building.position.y = (building.position.y - 1000) + yAdjustment;
+        building.position.z -= gap + 2000
+        building.castShadow = true;
+        building.receiveShadow = true;
+        const data = {
+            tags: [WorldObjectTags.Collision, WorldObjectTags.Platform]
+        } as WorldObjectData;
+        building.userData = data;
+        scene.add(building);
+
+
+        const width = 400
+        const posAttachable = pos.clone();
+        if (!SwingUpOrDownChallenge.isUp)
+            posAttachable.y += 5000
+        for (let i = 0; i < n; i++) {
+            posAttachable.z -= (gap * ((i + 1) / (n * 3))) - (width / 2);
+            posAttachable.y += (SwingUpOrDownChallenge.isUp ? 2500 : -2500);
+
+            const box = new Mesh(
+                new BoxGeometry(400, 400, 400),
+                SwingUpOrDownChallenge.material
+            );
+            box.position.copy(posAttachable);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            box.userData = {
+                tags: [WorldObjectTags.Attachable, WorldObjectTags.Collision]
+            } as WorldObjectData;
+            scene.add(box);
+        }
+
+
+        const nextPos = pos.clone();
+        nextPos.z -= gap + 4000;
+        nextPos.y += yAdjustment;
+        SwingUpOrDownChallenge.isUp = !SwingUpOrDownChallenge.isUp;
+        return [nextPos, data];
+    }
+}
+
 export class NSwingChallenge implements Challenge {
     private renderer!: WebGLRenderer;
     private static material?: MeshStandardMaterial;
@@ -146,7 +211,7 @@ export class NSwingChallenge implements Challenge {
         const posAttachable = pos.clone();
         posAttachable.y += 2500;
 
-        for (let i = 0; i < Math.max(n -1, 1); i++) {
+        for (let i = 0; i < Math.max(n - 1, 1); i++) {
             posAttachable.z -= (gap / (n === 1 ? 3 : n)) - (width / 2);
 
             const box = new Mesh(
@@ -318,8 +383,6 @@ export class DebugPos implements Challenge {
 
         return [pos.clone(), {}];
     }
-
-
 }
 
 export class LevelGenerator implements Level {
@@ -334,11 +397,12 @@ export class LevelGenerator implements Level {
     private simpleSwingChallenge = new SimpleSwingChallenge();
     private cornerSwingChallenge = new CornerSwingChallenge();
     private nSwingChallenge = new NSwingChallenge()
+    private upOrDownChallenge = new SwingUpOrDownChallenge()
     private allChallenges: Challenge[] = [
         this.simpleSwingChallenge,
         this.cornerSwingChallenge,
-        this.cornerSwingChallenge,
-        this.nSwingChallenge
+        this.nSwingChallenge,
+        this.upOrDownChallenge
     ];
 
     private nextPos: Vector3 = this.spawn.clone();
@@ -356,13 +420,13 @@ export class LevelGenerator implements Level {
         this.nextPos.y = 0;
         const [nextPos, data] = spawnChallenge.init(scene, renderer, this.nextPos)
         this.nextPos = nextPos;
-        debugPos.init(scene, renderer, this.nextPos);
+        //debugPos.init(scene, renderer, this.nextPos);
         this.render10Challenges(scene, renderer);
     }
 
     update(scene: Scene, renderer: WebGLRenderer): void {
         const collected = this.lastPlatformUserData.findIndex(x => x.isCollected) !== -1;
-        if(!collected) return;
+        if (!collected) return;
 
         this.lastPlatformUserData.length = 0;
         this.render10Challenges(scene, renderer)
@@ -371,13 +435,13 @@ export class LevelGenerator implements Level {
     private render10Challenges(scene: Scene, renderer: WebGLRenderer) {
         const debugPos = new DebugPos();
 
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 10; i++) {
             const n = Math.floor(Math.random() * this.allChallenges.length);
             console.log(n)
-            const [nextPos, data]  = this.allChallenges[n].init(scene, renderer, this.nextPos)
+            const [nextPos, data] = this.allChallenges[n].init(scene, renderer, this.nextPos)
             this.nextPos = nextPos;
-            debugPos.init(scene, renderer, this.nextPos);
-            if(i > 2) {
+            //debugPos.init(scene, renderer, this.nextPos);
+            if (i > 6) {
                 this.lastPlatformUserData.push(data);
             }
         }
